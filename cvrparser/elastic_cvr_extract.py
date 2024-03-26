@@ -98,7 +98,7 @@ class CvrConnection(object):
         self.elastic_client = create_elastic_connection(self.url, (self.user, self.password))
         print('Elastic Search Client:', self.elastic_client.info())
         self.elastic_search_scan_size = 128
-        self.elastic_search_scroll_time = u'20m'
+        self.elastic_search_scroll_time = u'25m'
         # max number of updates to download without scan scroll
         self.max_download_size = 200000
         self.update_list = namedtuple('update_list',
@@ -617,7 +617,7 @@ def update_time_worker(args):
     samt_key = '{0}.samtId'.format(_type)
     field_list = ['_id', sidst_key, samt_key]
     search = search.fields(fields=field_list)
-    params = {'scroll': '10m', 'size': 2 ** 12}
+    params = {'scroll': '25m', 'size': 2 ** 12}
     search = search.params(**params)
     print('ElasticSearch Query: ', search.to_dict())
     generator = search.scan()
