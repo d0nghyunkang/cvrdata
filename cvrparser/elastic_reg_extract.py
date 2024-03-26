@@ -86,7 +86,7 @@ class RegistrationConnection(object):
         self.elastic_client = create_elastic_connection(self.url, (self.user, self.password))
         print('Elastic Search Client:', self.elastic_client.info())
         self.elastic_search_scan_size = 512
-        self.elastic_search_scroll_time = u'20m'
+        self.elastic_search_scroll_time = u'25m'
 
     def search_field_val(self, field, value, size=100):
         search = Search(using=self.elastic_client, index=self.index)
