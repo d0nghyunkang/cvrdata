@@ -42,7 +42,7 @@ if __name__ == '__main__':
     # chunk size
     elastic_search_scan_size = 128
     # server keep alive time
-    elastic_search_scroll_time = u'5m'
+    elastic_search_scroll_time = u'25m'
     # place to store file
     json_filename = os.path.join('./', 'cvr_all.json')
     # set elastic search params
