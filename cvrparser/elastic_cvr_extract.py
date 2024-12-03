@@ -1,4 +1,5 @@
 from elasticsearch import Elasticsearch
+from elasticsearch.exceptions import TransportError
 # import elasticsearch_dsl
 from elasticsearch_dsl import Search
 from collections import namedtuple
@@ -24,7 +25,8 @@ import sys
 def update_all_mp(workers=1):
     # https://docs.python.org/3/howto/logging-cookbook.html
     lock = multiprocessing.Lock()
-    queue_size = 30000
+    # queue_size = 30000
+    queue_size = 10000  # Reduce queue size to balance load    
     queue = multiprocessing.Queue(maxsize=queue_size)  # maxsize=1000*1000*20)
     prod = multiprocessing.Process(target=cvr_update_producer, args=(queue, lock))
     # prod.daemon = True
@@ -97,8 +99,8 @@ class CvrConnection(object):
         # self.ElasticParams = [self.url, (self.user, self.password), 60, 10, True]
         self.elastic_client = create_elastic_connection(self.url, (self.user, self.password))
         print('Elastic Search Client:', self.elastic_client.info())
-        self.elastic_search_scan_size = 128
-        self.elastic_search_scroll_time = u'25m'
+        self.elastic_search_scan_size = 64  # Lowered from 128
+        self.elastic_search_scroll_time = '5m'  # Reduced to avoid scroll expiry
         # max number of updates to download without scan scroll
         self.max_download_size = 200000
         self.update_list = namedtuple('update_list',
@@ -178,15 +180,16 @@ class CvrConnection(object):
         #     update_since_last(3)
 
     def download_all_data_to_file(self, filename):
-        """
-        :return:
-        str: filename, datetime: download time, bool: new download or use old file
-        """
         params = {'scroll': self.elastic_search_scroll_time, 'size': self.elastic_search_scan_size}
-        search = Search(using=self.elastic_client, index=self.index)
-        search = search.query('match_all')
-        search = search.params(**params)
-        download_all_dicts_to_file(filename, search)
+        search = Search(using=self.elastic_client, index=self.index).query('match_all').params(**params)
+    
+        try:
+            generator = retry_generator(search.scan())
+            download_all_dicts_to_file(filename, generator)
+        except NotFoundError as e:
+            print(f"Scroll context expired. Restarting: {e}")
+            self.download_all_data_to_file(filename)  # Restart the process
+
 
     def download_all_dicts_to_file_from_update_info(self, update_info):
         """ DEPRECATED
@@ -521,7 +524,7 @@ class CvrConnection(object):
             params = {'scroll': self.elastic_search_scroll_time, 'size': 2**12}
             search = search.params(**params)
             print('ElasticSearch Query: ', search.to_dict())
-            generator = search.scan()
+            generator = retry_generator(search.scan())
             for cvr_update in tqdm.tqdm(generator):
                 enhedsnummer = int(cvr_update.meta.id)
                 raw_dat = cvr_update.to_dict()
@@ -593,7 +596,7 @@ class CvrConnection(object):
         params = {'scroll': self.elastic_search_scroll_time, 'size': 2*self.elastic_search_scan_size}
         search = search.params(**params)
         print('ElasticSearch Query: ', search.to_dict())
-        generator = search.scan()
+        generator = retry_generator(search.scan())
         ids = [x.meta.id for x in generator]
         return ids
 
@@ -620,7 +623,7 @@ def update_time_worker(args):
     params = {'scroll': '25m', 'size': 2 ** 12}
     search = search.params(**params)
     print('ElasticSearch Query: ', search.to_dict())
-    generator = search.scan()
+    generator = retry_generator(search.scan())
     for cvr_update in generator:
         enhedsnummer = int(cvr_update.meta.id)
         raw_dat = cvr_update.to_dict()
@@ -636,19 +639,27 @@ def update_time_worker(args):
     return _type, type_dict
 
 
-def retry_generator(g):
+def retry_generator(g, max_retries=5, backoff_factor=0.5):
     failed = 0
     while True:
         try:
             yield next(g)
         except StopIteration:
             return
-        except Exception as e:
-            print('retry generator', failed)
-            failed += 1
-            print(e)
-            if failed > 3:
+        except TransportError as e:
+            if e.status_code == 429:
+                if failed >= max_retries:
+                    raise RuntimeError("Exceeded maximum retries for generator.")
+                backoff = backoff_factor * (2 ** failed)
+                print(f"Retrying in {backoff:.2f} seconds...")
+                time.sleep(backoff)
+                failed += 1
+            else:
                 raise
+        except Exception as e:
+            print(f"Unexpected error in retry generator: {e}")
+            raise
+
 
 
 def cvr_update_producer(queue, lock):
@@ -691,7 +702,7 @@ def cvr_update_producer(queue, lock):
         search = Search(using=cvr.elastic_client, index=cvr.index).query('match_all').params(**params)
         # search = Search(using=cvr.elastic_client, index=cvr.index).query(elasticsearch_dsl.query.MatchAll()).params(**params)
 
-        generator = search.scan()
+        generator = retry_generator(search.scan())
         full_update = False
         i = 0
         for obj in tqdm.tqdm(generator):
