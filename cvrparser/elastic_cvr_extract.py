@@ -100,7 +100,7 @@ class CvrConnection(object):
         self.elastic_client = create_elastic_connection(self.url, (self.user, self.password))
         print('Elastic Search Client:', self.elastic_client.info())
         self.elastic_search_scan_size = 64  # Lowered from 128
-        self.elastic_search_scroll_time = '5m'  # Reduced to avoid scroll expiry
+        self.elastic_search_scroll_time = '25m'  # previously 20m
         # max number of updates to download without scan scroll
         self.max_download_size = 200000
         self.update_list = namedtuple('update_list',
