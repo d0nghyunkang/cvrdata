@@ -127,7 +127,7 @@ def setup_database_connection(config_name='Global'):
     connection_url = ("{sql_type}://{user}:{passwd}@{host}:{port}/"
                       "{database}?charset={charset}")
     connection_url = connection_url.format(**_config)
-    _engine = create_engine(connection_url, encoding='utf8',
+    _engine = create_engine(connection_url, 
                             echo=False,  pool_size=30, max_overflow=30,
                             pool_recycle=3600)
     _session = sessionmaker(bind=engine)
