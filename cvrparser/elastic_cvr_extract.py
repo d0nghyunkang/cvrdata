@@ -617,7 +617,7 @@ def update_time_worker(args):
     samt_key = '{0}.samtId'.format(_type)
     field_list = ['_id', sidst_key, samt_key]
     search = search.fields(fields=field_list)
-    params = {'scroll': '10m', 'size': 2 ** 12}
+    params = {'scroll': '20m', 'size': 2 ** 12}
     search = search.params(**params)
     print('ElasticSearch Query: ', search.to_dict())
     generator = search.scan()
