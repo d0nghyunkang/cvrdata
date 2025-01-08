@@ -25,8 +25,8 @@ import sys
 def update_all_mp(workers=1):
     # https://docs.python.org/3/howto/logging-cookbook.html
     lock = multiprocessing.Lock()
-    # queue_size = 30000
-    queue_size = 10000  # Reduce queue size to balance load    
+    queue_size = 30000
+    # queue_size = 10000  # Reduce queue size to balance load    
     queue = multiprocessing.Queue(maxsize=queue_size)  # maxsize=1000*1000*20)
     prod = multiprocessing.Process(target=cvr_update_producer, args=(queue, lock))
     # prod.daemon = True
@@ -99,7 +99,7 @@ class CvrConnection(object):
         # self.ElasticParams = [self.url, (self.user, self.password), 60, 10, True]
         self.elastic_client = create_elastic_connection(self.url, (self.user, self.password))
         print('Elastic Search Client:', self.elastic_client.info())
-        self.elastic_search_scan_size = 64  # Lowered from 128
+        self.elastic_search_scan_size = 128  # 128 is orignal
         self.elastic_search_scroll_time = '25m'  # previously 20m
         # max number of updates to download without scan scroll
         self.max_download_size = 200000
